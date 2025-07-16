@@ -1,0 +1,96 @@
+version: "3"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    platform: linux/amd64
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=local-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - HDFS_CONF_dfs_namenode_http-address=0.0.0.0:9870
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_namenode_acls_enabled=true      
+    ports:
+      - "9870:9870"  # Web UI
+      - "50070:50070"  # Web UI      
+      - "9000:9000"  # HDFS
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+      - ./image:/app/image
+      - ./temp:/app/temp
+    networks:
+      - hadoop-network            
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    platform: linux/amd64
+    container_name: datanode
+    depends_on:
+      - namenode
+    environment:
+      - CLUSTER_NAME=local-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - HDFS_CONF_dfs_datanode_address=0.0.0.0:50010
+      - HDFS_CONF_dfs_datanode_http-address=0.0.0.0:9864
+      - HDFS_CONF_dfs_namenode_acls_enabled=true            
+    ports:
+      - "8864:9864"  # DataNode UI
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    networks:
+      - hadoop-network      
+
+  spark-master:
+    image: bitnami/spark:3.3
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    depends_on:
+      - namenode
+    networks:
+      - hadoop-network
+
+  spark-worker:
+    image: bitnami/spark:3.3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    ports:
+      - "8081:8081"
+    depends_on:
+      - spark-master
+    networks:
+      - hadoop-network
+
+  jupyter:
+    image: jupyter/pyspark-notebook
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    user: root
+    environment:
+      - SPARK_OPTS=--conf spark.hadoop.fs.defaultFS=hdfs://namenode:9000
+      - GRANT_SUDO=yes
+    volumes:
+      - ./jupyter:/home/jovyan/work
+    depends_on:
+      - spark-master
+      - namenode
+    networks:
+      - hadoop-network
+   
+
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  jupiter_volume:
+  
+networks:
+  hadoop-network:  
